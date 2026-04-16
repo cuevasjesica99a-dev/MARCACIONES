@@ -1,299 +1,136 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>App +MARKA | Registro PDV</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>+MARKA Check</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <style>
-        body { font-family: 'Segoe UI', system-ui, sans-serif; }
-        #map { height: 250px; width: 100%; border-radius: 1.5rem; z-index: 10; }
-        .bg-marka { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); }
-        .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+<style>
+body { font-family: Arial; padding: 20px; }
+input, select, button {
+  width: 100%;
+  padding: 12px;
+  margin: 8px 0;
+}
+button { background: #007bff; color: white; border: none; }
+#status { font-weight: bold; }
+</style>
 </head>
-<body class="bg-gray-100 min-h-screen">
 
-    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col shadow-2xl bg-white relative">
-        
-        <header class="bg-marka text-white p-6 rounded-b-[2rem] shadow-lg sticky top-0 z-50">
-            <div class="flex justify-between items-center">
-                <div>
-                    <h1 class="text-2xl font-black italic tracking-tighter">+MARKA</h1>
-                    <p id="userDisplay" class="text-xs opacity-90"></p>
-                </div>
-                <i class="fas fa-location-dot text-2xl opacity-50"></i>
-            </div>
-        </header>
+<body>
 
-        <section id="loginScreen" class="p-8 space-y-6 hidden flex-grow flex flex-col justify-center">
-            <div class="text-center">
-                <h2 class="text-2xl font-bold text-blue-900">Acceso Relevadores</h2>
-                <p class="text-gray-500 text-sm">Identifícate para iniciar tu ruta</p>
-            </div>
-            <div class="space-y-4">
-                <input type="text" id="loginNombre" placeholder="Nombre completo" class="w-full p-4 border rounded-2xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500">
-                <input type="number" id="loginCedula" placeholder="Nro. de Cédula" class="w-full p-4 border rounded-2xl bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500">
-                <button onclick="app.login()" class="w-full bg-marka text-white p-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">INGRESAR</button>
-            </div>
-        </section>
+<h2>+MARKA Check-In / Out</h2>
 
-        <main id="mainScreen" class="p-5 space-y-5 hidden flex-grow">
-            
-            <div class="relative">
-                <label class="text-[10px] font-black text-gray-400 uppercase ml-2">Punto de Venta (PDV)</label>
-                <div class="relative">
-                    <i class="fas fa-search absolute left-4 top-4 text-blue-500"></i>
-                    <input type="text" id="pdvSearch" placeholder="Buscar por nombre..." class="w-full pl-12 p-4 mt-1 border rounded-2xl bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-200">
-                </div>
-                <div id="pdvResults" class="absolute z-[100] w-full bg-white shadow-2xl rounded-2xl mt-2 max-h-60 overflow-y-auto hidden border border-gray-100"></div>
-            </div>
+<input id="nombre" placeholder="Nombre">
+<input id="cedula" placeholder="Cédula">
 
-            <div id="mapContainer" class="hidden space-y-2">
-                <div id="map" class="shadow-inner border-2 border-white"></div>
-                <div class="flex justify-between items-center px-1">
-                    <span id="distanciaText" class="text-[11px] font-bold text-gray-500 uppercase">Detectando ubicación...</span>
-                    <div id="statusIndicator" class="h-3 w-3 rounded-full bg-gray-300"></div>
-                </div>
-            </div>
+<select id="pdv"></select>
 
-            <div id="pdvInfo" class="hidden p-4 rounded-2xl bg-blue-50 border border-blue-100">
-                <h3 id="infoNombre" class="font-bold text-blue-900 leading-tight"></h3>
-                <p id="infoDetalle" class="text-[10px] text-blue-600 uppercase font-medium mt-1"></p>
-            </div>
+<p id="status">Cargando ubicación...</p>
 
-            <div class="grid grid-cols-1 gap-3">
-                <button id="btnCheckIn" onclick="app.doCheckIn()" class="w-full p-5 rounded-2xl bg-green-500 text-white font-black shadow-lg disabled:opacity-30 transition-all flex items-center justify-center gap-2">
-                    <i class="fas fa-play"></i> CHECK-IN
-                </button>
-                <button id="btnCheckOut" onclick="app.doCheckOut()" class="w-full p-5 rounded-2xl bg-red-500 text-white font-black shadow-lg disabled:opacity-30 transition-all flex items-center justify-center gap-2">
-                    <i class="fas fa-stop"></i> CHECK-OUT
-                </button>
-            </div>
+<button onclick="checkIn()">CHECK-IN</button>
+<button onclick="checkOut()">CHECK-OUT</button>
 
-            <div id="loader" class="hidden flex flex-col items-center py-4">
-                <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-10 w-10 mb-2"></div>
-                <p class="text-[10px] text-blue-600 font-bold animate-pulse">ENVIANDO DATOS A +MARKA...</p>
-            </div>
-        </main>
+<script>
+const API = "https://script.google.com/macros/s/AKfycbwSgHk2AzbqNRKkrpCvsxZuQAMFpC4Ej7Z05dS44xXkB2vHxLLDbFqabYE6ccK8ZMTG/exec";
 
-        <footer class="p-6 text-center">
-            <button onclick="app.logout()" class="text-gray-300 text-[10px] font-bold uppercase tracking-tighter border-b border-gray-200">Cerrar Sesión</button>
-        </footer>
-    </div>
+let userLat, userLng;
+let pdvData = [];
+let selectedPDV = null;
 
-    <script>
-        const CONFIG = {
-            // Tu URL de ejecución proporcionada
-            API_URL: 'https://script.google.com/macros/s/AKfycbwSgHk2AzbqNRKkrpCvsxZuQAMFpC4Ej7Z05dS44xXkB2vHxLLDbFqabYE6ccK8ZMTG/exec',
-            VALID_RADIUS: 50 // Metros permitidos para marcar
-        };
+navigator.geolocation.getCurrentPosition(pos => {
+  userLat = pos.coords.latitude;
+  userLng = pos.coords.longitude;
+  document.getElementById("status").innerText = "Ubicación obtenida";
+});
 
-        let map, userMarker, pdvMarker, rangeCircle;
+fetch(API + "?action=pdv")
+.then(res => res.json())
+.then(data => {
+  pdvData = data;
+  let select = document.getElementById("pdv");
 
-        const app = {
-            pdvs: [],
-            selectedPdv: null,
-            userData: null,
-            activeSession: null,
-            isNear: false,
+  data.forEach(p => {
+    let opt = document.createElement("option");
+    opt.value = p.id;
+    opt.text = p.nombre;
+    select.add(opt);
+  });
 
-            init: async () => {
-                app.userData = JSON.parse(localStorage.getItem('marka_user'));
-                app.activeSession = JSON.parse(localStorage.getItem('marka_session'));
+  select.onchange = () => {
+    selectedPDV = pdvData.find(p => p.id == select.value);
+  };
+});
 
-                if (!app.userData) {
-                    app.showScreen('loginScreen');
-                } else {
-                    app.showScreen('mainScreen');
-                    app.fetchPdvs();
-                    if (app.activeSession) app.restoreSession();
-                }
-            },
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
 
-            showScreen: (id) => {
-                ['loginScreen', 'mainScreen'].forEach(s => document.getElementById(s).classList.add('hidden'));
-                document.getElementById(id).classList.remove('hidden');
-                if(app.userData) document.getElementById('userDisplay').innerText = `Agente: ${app.userData.nombre}`;
-            },
+  const a = Math.sin(Δφ/2)**2 +
+    Math.cos(φ1)*Math.cos(φ2) *
+    Math.sin(Δλ/2)**2;
 
-            login: () => {
-                const nombre = document.getElementById('loginNombre').value;
-                const cedula = document.getElementById('loginCedula').value;
-                if (!nombre || !cedula) return alert('Ingresa nombre y cédula');
-                app.userData = { nombre, cedula };
-                localStorage.setItem('marka_user', JSON.stringify(app.userData));
-                app.init();
-            },
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
 
-            logout: () => {
-                if(confirm('¿Deseas cerrar sesión?')) {
-                    localStorage.clear();
-                    location.reload();
-                }
-            },
+function validarUbicacion() {
+  if (!selectedPDV) return false;
 
-            fetchPdvs: async () => {
-                try {
-                    const res = await fetch(CONFIG.API_URL);
-                    app.pdvs = await res.json();
-                } catch (e) { console.error("Error cargando base de datos"); }
-            },
+  let dist = getDistance(userLat, userLng, selectedPDV.lat, selectedPDV.lng);
 
-            initMap: () => {
-                if (map) return;
-                document.getElementById('mapContainer').classList.remove('hidden');
-                map = L.map('map', { zoomControl: false }).setView([-25.3, -57.6], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            },
+  if (dist <= 50) {
+    document.getElementById("status").innerText = "✔ En PDV (" + Math.round(dist) + "m)";
+    return dist;
+  } else {
+    document.getElementById("status").innerText = "❌ Fuera del PDV (" + Math.round(dist) + "m)";
+    return false;
+  }
+}
 
-            selectPdv: (pdv) => {
-                app.selectedPdv = pdv;
-                document.getElementById('pdvSearch').value = pdv.nombre;
-                document.getElementById('pdvResults').classList.add('hidden');
-                document.getElementById('pdvInfo').classList.remove('hidden');
-                document.getElementById('infoNombre').innerText = pdv.nombre;
-                document.getElementById('infoDetalle').innerText = `${pdv.cadena} | ${pdv.ciudad}`;
-                
-                app.initMap();
-                app.drawPdvOnMap(pdv.lat, pdv.lng);
-                app.startTracking();
-                app.updateButtons();
-            },
+function checkIn() {
+  let dist = validarUbicacion();
+  if (!dist) return alert("No estás en el PDV");
 
-            drawPdvOnMap: (lat, lng) => {
-                if (pdvMarker) map.removeLayer(pdvMarker);
-                if (rangeCircle) map.removeLayer(rangeCircle);
+  let data = {
+    nombre: nombre.value,
+    cedula: cedula.value,
+    pdv: selectedPDV.nombre,
+    checkin: new Date().toLocaleTimeString(),
+    checkout: "",
+    lat: userLat,
+    lng: userLng,
+    distancia: dist
+  };
 
-                pdvMarker = L.marker([lat, lng]).addTo(map);
-                rangeCircle = L.circle([lat, lng], {
-                    color: '#3b82f6',
-                    fillColor: '#3b82f6',
-                    fillOpacity: 0.1,
-                    radius: CONFIG.VALID_RADIUS
-                }).addTo(map);
+  enviar(data);
+}
 
-                map.setView([lat, lng], 18);
-            },
+function checkOut() {
+  let data = {
+    nombre: nombre.value,
+    cedula: cedula.value,
+    pdv: selectedPDV.nombre,
+    checkin: "",
+    checkout: new Date().toLocaleTimeString(),
+    lat: userLat,
+    lng: userLng,
+    distancia: 0
+  };
 
-            startTracking: () => {
-                navigator.geolocation.watchPosition(pos => {
-                    const { latitude, longitude } = pos.coords;
-                    
-                    if (userMarker) {
-                        userMarker.setLatLng([latitude, longitude]);
-                    } else {
-                        userMarker = L.circleMarker([latitude, longitude], {
-                            radius: 7, fillColor: "#1e3a8a", color: "#fff", weight: 2, fillOpacity: 1
-                        }).addTo(map).bindPopup("Tu posición");
-                    }
+  enviar(data);
+}
 
-                    if (app.selectedPdv) {
-                        const dist = app.calculateDistance(latitude, longitude, app.selectedPdv.lat, app.selectedPdv.lng);
-                        app.isNear = dist <= CONFIG.VALID_RADIUS;
-                        
-                        document.getElementById('statusIndicator').className = `h-3 w-3 rounded-full ${app.isNear ? 'bg-green-500' : 'bg-red-500'}`;
-                        document.getElementById('distanciaText').innerText = `Distancia: ${Math.round(dist)}m ${app.isNear ? '(En rango)' : '(Fuera de rango)'}`;
-                    }
-                }, null, { enableHighAccuracy: true });
-            },
+function enviar(data) {
+  fetch(API, {
+    method: "POST",
+    body: JSON.stringify(data)
+  })
+  .then(() => alert("Guardado correctamente"));
+}
+</script>
 
-            calculateDistance: (lat1, lon1, lat2, lon2) => {
-                const R = 6371e3;
-                const d1 = lat1 * Math.PI/180;
-                const d2 = lat2 * Math.PI/180;
-                const dl = (lat2-lat1) * Math.PI/180;
-                const dg = (lon2-lon1) * Math.PI/180;
-                const a = Math.sin(dl/2)**2 + Math.cos(d1)*Math.cos(d2)*Math.sin(dg/2)**2;
-                return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-            },
-
-            doCheckIn: () => {
-                if (!app.isNear) return alert('Debes estar dentro del círculo azul para marcar.');
-                
-                app.activeSession = {
-                    pdv: app.selectedPdv.nombre,
-                    fecha: new Date().toLocaleDateString(),
-                    entrada: new Date().toLocaleTimeString()
-                };
-                
-                localStorage.setItem('marka_session', JSON.stringify(app.activeSession));
-                alert('ENTRADA REGISTRADA CORRECTAMENTE');
-                app.updateButtons();
-            },
-
-            doCheckOut: async () => {
-                if (!app.isNear) return alert('Debes estar en el PDV para finalizar.');
-                
-                const payload = {
-                    ...app.userData,
-                    ...app.activeSession,
-                    salida: new Date().toLocaleTimeString(),
-                    lat: app.selectedPdv.lat,
-                    lng: app.selectedPdv.lng
-                };
-
-                document.getElementById('loader').classList.remove('hidden');
-                
-                try {
-                    await fetch(CONFIG.API_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    alert('VISITA COMPLETADA Y SINCRONIZADA');
-                    localStorage.removeItem('marka_session');
-                    location.reload();
-                } catch (e) {
-                    alert('Error al enviar datos. Intenta nuevamente.');
-                } finally {
-                    document.getElementById('loader').classList.add('hidden');
-                }
-            },
-
-            updateButtons: () => {
-                const hasSession = !!app.activeSession;
-                document.getElementById('btnCheckIn').disabled = hasSession || !app.selectedPdv;
-                document.getElementById('btnCheckOut').disabled = !hasSession;
-                if(hasSession) {
-                    document.getElementById('pdvSearch').disabled = true;
-                    document.getElementById('pdvSearch').classList.add('bg-gray-100');
-                }
-            },
-
-            restoreSession: () => {
-                // Lógica para recuperar la UI si hay un check-in activo
-                document.getElementById('pdvInfo').classList.remove('hidden');
-                document.getElementById('infoNombre').innerText = app.activeSession.pdv;
-                document.getElementById('infoDetalle').innerText = `Check-in realizado a las ${app.activeSession.entrada}`;
-                app.updateButtons();
-            },
-
-            searchPdv: (q) => {
-                const container = document.getElementById('pdvResults');
-                if (q.length < 2) { container.classList.add('hidden'); return; }
-                
-                const filtered = app.pdvs.filter(p => p.nombre.toLowerCase().includes(q.toLowerCase()));
-                container.innerHTML = filtered.map(p => `
-                    <div class="p-4 border-b active:bg-blue-50" onclick='app.selectPdv(${JSON.stringify(p)})'>
-                        <p class="font-bold text-sm text-blue-900">${p.nombre}</p>
-                        <p class="text-[10px] text-gray-400 uppercase">${p.cadena} | ${p.ciudad}</p>
-                    </div>
-                `).join('');
-                container.classList.remove('hidden');
-            }
-        };
-
-        document.getElementById('pdvSearch').addEventListener('input', (e) => app.searchPdv(e.target.value));
-        window.onload = app.init;
-    </script>
 </body>
 </html>
