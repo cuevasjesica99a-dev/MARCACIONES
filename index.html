@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-in +MARKA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loader { border-top-color: #3498db; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-blue-800 tracking-tight">+MARKA</h1>
+            <p class="text-gray-500 text-sm">Registro de Asistencia PDV</p>
+        </div>
+
+        <form id="checkinForm" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Nombre del Relevador</label>
+                <input type="text" id="relevador" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Cédula de Identidad</label>
+                <input type="number" id="cedula" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+
+            <div class="relative">
+                <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Punto de Venta (PDV)</label>
+                <input type="text" id="pdvInput" placeholder="Buscar local..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                <div id="autocompleteResults" class="absolute z-10 w-full bg-white border border-gray-200 rounded-b-lg shadow-lg hidden max-h-48 overflow-y-auto"></div>
+            </div>
+
+            <div id="statusMsg" class="hidden p-3 rounded-lg text-sm font-medium text-center"></div>
+
+            <div class="grid grid-cols-1 gap-3 pt-4">
+                <button type="button" id="btnCheckIn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition duration-200 disabled:opacity-50">
+                    INICIAR CHECK-IN
+                </button>
+                <button type="button" id="btnCheckOut" class="bg-gray-400 text-white font-bold py-4 rounded-xl cursor-not-allowed transition duration-200" disabled>
+                    FINALIZAR CHECK-OUT
+                </button>
+            </div>
+        </form>
+
+        <div id="loader" class="hidden flex flex-col items-center mt-6">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-10 w-10 mb-2"></div>
+            <p class="text-xs text-gray-500">Validando ubicación GPS...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'TU_URL_DE_WEB_APP_AQUI'; // Pegar aquí la URL tras publicar en Apps Script
+        let pdvList = [];
+        let selectedPDV = null;
+        let checkInTime = null;
+
+        // 1. Cargar PDVs al iniciar
+        window.onload = async () => {
+            try {
+                const res = await fetch(API_URL);
+                pdvList = await res.json();
+            } catch (e) {
+                showMsg('Error al conectar con la base de datos', 'error');
+            }
+        };
+
+        // 2. Autocompletado
+        const pdvInput = document.getElementById('pdvInput');
+        const resultsDiv = document.getElementById('autocompleteResults');
+
+        pdvInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            resultsDiv.innerHTML = '';
+            if (!val) { resultsDiv.classList.add('hidden'); return; }
+
+            const filtered = pdvList.filter(p => p.display.toLowerCase().includes(val));
+            filtered.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'p-3 hover:bg-blue-50 cursor-pointer text-sm border-b';
+                div.textContent = p.display;
+                div.onclick = () => {
+                    pdvInput.value = p.display;
+                    selectedPDV = p;
+                    resultsDiv.classList.add('hidden');
+                };
+                resultsDiv.appendChild(div);
+            });
+            resultsDiv.classList.remove('hidden');
+        });
+
+        // 3. Fórmula de Haversine (Cálculo de distancia)
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radio de la tierra en metros
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // Distancia en metros
+        }
+
+        // 4. Lógica de Check-in
+        document.getElementById('btnCheckIn').onclick = async () => {
+            if (!selectedPDV || !document.getElementById('relevador').value) {
+                showMsg('Complete todos los campos', 'error');
+                return;
+            }
+
+            toggleLoader(true);
+            
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const userLat = pos.coords.latitude;
+                const userLng = pos.coords.longitude;
+                const distance = getDistance(userLat, userLng, selectedPDV.lat, selectedPDV.lng);
+
+                if (distance <= 50) {
+                    checkInTime = new Date().toLocaleTimeString();
+                    showMsg(`Check-in exitoso. Distancia: ${Math.round(distance)}m`, 'success');
+                    document.getElementById('btnCheckIn').disabled = true;
+                    document.getElementById('btnCheckIn').classList.replace('bg-blue-600', 'bg-green-600');
+                    document.getElementById('btnCheckOut').disabled = false;
+                    document.getElementById('btnCheckOut').classList.replace('bg-gray-400', 'bg-red-600');
+                    document.getElementById('btnCheckOut').classList.remove('cursor-not-allowed');
+                } else {
+                    showMsg(`No se encuentra en el PDV. Distancia: ${Math.round(distance)}m`, 'error');
+                }
+                toggleLoader(false);
+            }, (err) => {
+                showMsg('Error de GPS: Por favor active la ubicación', 'error');
+                toggleLoader(false);
+            }, { enableHighAccuracy: true });
+        };
+
+        // 5. Lógica de Check-out y Envío
+        document.getElementById('btnCheckOut').onclick = async () => {
+            const checkOutTime = new Date().toLocaleTimeString();
+            const payload = {
+                relevador: document.getElementById('relevador').value,
+                cedula: document.getElementById('cedula').value,
+                pdvNombre: selectedPDV.nombre,
+                checkIn: checkInTime,
+                checkOut: checkOutTime,
+                lat: selectedPDV.lat,
+                lng: selectedPDV.lng
+            };
+
+            toggleLoader(true);
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Necesario para evitar bloqueos de CORS en Apps Script simple
+                    body: JSON.stringify(payload)
+                });
+                showMsg('Datos enviados con éxito a +MARKA', 'success');
+                setTimeout(() => location.reload(), 3000);
+            } catch (e) {
+                showMsg('Error al guardar el registro', 'error');
+            }
+            toggleLoader(false);
+        };
+
+        function showMsg(txt, type) {
+            const el = document.getElementById('statusMsg');
+            el.textContent = txt;
+            el.className = `p-3 rounded-lg text-sm font-medium text-center ${type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`;
+            el.classList.remove('hidden');
+        }
+
+        function toggleLoader(show) {
+            document.getElementById('loader').classList.toggle('hidden', !show);
+        }
+    </script>
+</body>
+</html>
