@@ -1,136 +1,138 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>+MARKA Check</title>
-
-<style>
-body { font-family: Arial; padding: 20px; }
-input, select, button {
-  width: 100%;
-  padding: 12px;
-  margin: 8px 0;
-}
-button { background: #007bff; color: white; border: none; }
-#status { font-weight: bold; }
-</style>
+  <base target="_top">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 200px; width: 100%; border-radius: 12px; margin-bottom: 1rem; }
+    .select-custom { @apply w-full border-2 border-slate-200 p-3 rounded-xl focus:border-blue-500 outline-none transition-all bg-white; }
+  </style>
 </head>
+<body class="bg-slate-100 p-4">
+  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6">
+    <header class="text-center mb-6">
+      <h1 class="text-2xl font-black text-slate-800 tracking-tight">+MARKA</h1>
+      <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">Panel de Relevamiento</p>
+    </header>
 
-<body>
+    <div id="map"></div>
 
-<h2>+MARKA Check-In / Out</h2>
+    <form id="formMarcacion" class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre del Relevador</label>
+        <select id="nombre" onchange="autoCompletarCedula()" class="select-custom border-2 border-slate-200 w-full p-3 rounded-xl">
+          <option value="">Cargando personal...</option>
+        </select>
+      </div>
 
-<input id="nombre" placeholder="Nombre">
-<input id="cedula" placeholder="Cédula">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Cédula de Identidad</label>
+        <input type="text" id="cedula" readonly class="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl text-slate-500 font-mono" placeholder="ID automático">
+      </div>
 
-<select id="pdv"></select>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Punto de Venta</label>
+        <select id="pdv" onchange="enfocarPDV()" class="select-custom border-2 border-slate-200 w-full p-3 rounded-xl">
+          <option value="">Cargando locales...</option>
+        </select>
+      </div>
 
-<p id="status">Cargando ubicación...</p>
+      <div class="grid grid-cols-2 gap-4 mt-6">
+        <button type="button" onclick="enviar('IN')" class="bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">CHECK-IN</button>
+        <button type="button" onclick="enviar('OUT')" class="bg-rose-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">CHECK-OUT</button>
+      </div>
+    </form>
+  </div>
 
-<button onclick="checkIn()">CHECK-IN</button>
-<button onclick="checkOut()">CHECK-OUT</button>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let map, userMarker, pdvMarker;
+    let userLat, userLng;
+    let listaLocales = [];
+    let listaEmpleados = [];
 
-<script>
-const API = "https://script.google.com/macros/s/AKfycbwSgHk2AzbqNRKkrpCvsxZuQAMFpC4Ej7Z05dS44xXkB2vHxLLDbFqabYE6ccK8ZMTG/exec";
+    window.onload = () => {
+      map = L.map('map').setView([-25.30, -57.60], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let userLat, userLng;
-let pdvData = [];
-let selectedPDV = null;
+      // Cargar TODO desde el Sheet
+      google.script.run.withSuccessHandler(res => {
+        // Llenar Empleados
+        listaEmpleados = res.empleados;
+        const selEmp = document.getElementById('nombre');
+        selEmp.innerHTML = '<option value="">Seleccione su nombre...</option>';
+        res.empleados.forEach((e, i) => {
+          let opt = document.createElement('option');
+          opt.value = i;
+          opt.innerHTML = e.nombre;
+          selEmp.appendChild(opt);
+        });
 
-navigator.geolocation.getCurrentPosition(pos => {
-  userLat = pos.coords.latitude;
-  userLng = pos.coords.longitude;
-  document.getElementById("status").innerText = "Ubicación obtenida";
-});
+        // Llenar Locales
+        listaLocales = res.locales;
+        const selPdv = document.getElementById('pdv');
+        selPdv.innerHTML = '<option value="">Seleccione el local...</option>';
+        res.locales.forEach((l, i) => {
+          let opt = document.createElement('option');
+          opt.value = i;
+          opt.innerHTML = l.nombre;
+          selPdv.appendChild(opt);
+        });
+      }).obtenerDatosBase();
 
-fetch(API + "?action=pdv")
-.then(res => res.json())
-.then(data => {
-  pdvData = data;
-  let select = document.getElementById("pdv");
+      navigator.geolocation.watchPosition(pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        if (!userMarker) {
+          userMarker = L.circleMarker([userLat, userLng], {color: '#3b82f6', radius: 8, fillOpacity: 0.8}).addTo(map);
+        } else {
+          userMarker.setLatLng([userLat, userLng]);
+        }
+      }, null, {enableHighAccuracy: true});
+    };
 
-  data.forEach(p => {
-    let opt = document.createElement("option");
-    opt.value = p.id;
-    opt.text = p.nombre;
-    select.add(opt);
-  });
+    function autoCompletarCedula() {
+      const idx = document.getElementById('nombre').value;
+      if(idx !== "") document.getElementById('cedula').value = listaEmpleados[idx].cedula;
+    }
 
-  select.onchange = () => {
-    selectedPDV = pdvData.find(p => p.id == select.value);
-  };
-});
+    function enfocarPDV() {
+      const idx = document.getElementById('pdv').value;
+      if (idx === "") return;
+      const local = listaLocales[idx];
+      if (pdvMarker) map.removeLayer(pdvMarker);
+      pdvMarker = L.marker([local.lat, local.lng]).addTo(map).bindPopup(local.nombre).openPopup();
+      map.flyTo([local.lat, local.lng], 16);
+    }
 
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
+    function enviar(tipo) {
+      const idxEmp = document.getElementById('nombre').value;
+      const idxPdv = document.getElementById('pdv').value;
+      
+      if (!userLat || idxEmp === "" || idxPdv === "") {
+        alert("Faltan datos o señal GPS.");
+        return;
+      }
 
-  const a = Math.sin(Δφ/2)**2 +
-    Math.cos(φ1)*Math.cos(φ2) *
-    Math.sin(Δλ/2)**2;
+      const ahora = new Date().toLocaleString();
+      const datos = {
+        timestamp: ahora,
+        nombre: listaEmpleados[idxEmp].nombre,
+        cedula: listaEmpleados[idxEmp].cedula,
+        pdv: listaLocales[idxPdv].nombre,
+        latActual: userLat,
+        lngActual: userLng,
+        validacion: "GPS OK",
+        checkin: tipo === 'IN' ? ahora : "",
+        checkout: tipo === 'OUT' ? ahora : ""
+      };
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
-function validarUbicacion() {
-  if (!selectedPDV) return false;
-
-  let dist = getDistance(userLat, userLng, selectedPDV.lat, selectedPDV.lng);
-
-  if (dist <= 50) {
-    document.getElementById("status").innerText = "✔ En PDV (" + Math.round(dist) + "m)";
-    return dist;
-  } else {
-    document.getElementById("status").innerText = "❌ Fuera del PDV (" + Math.round(dist) + "m)";
-    return false;
-  }
-}
-
-function checkIn() {
-  let dist = validarUbicacion();
-  if (!dist) return alert("No estás en el PDV");
-
-  let data = {
-    nombre: nombre.value,
-    cedula: cedula.value,
-    pdv: selectedPDV.nombre,
-    checkin: new Date().toLocaleTimeString(),
-    checkout: "",
-    lat: userLat,
-    lng: userLng,
-    distancia: dist
-  };
-
-  enviar(data);
-}
-
-function checkOut() {
-  let data = {
-    nombre: nombre.value,
-    cedula: cedula.value,
-    pdv: selectedPDV.nombre,
-    checkin: "",
-    checkout: new Date().toLocaleTimeString(),
-    lat: userLat,
-    lng: userLng,
-    distancia: 0
-  };
-
-  enviar(data);
-}
-
-function enviar(data) {
-  fetch(API, {
-    method: "POST",
-    body: JSON.stringify(data)
-  })
-  .then(() => alert("Guardado correctamente"));
-}
-</script>
-
+      google.script.run.withSuccessHandler(() => {
+        alert("¡Registro guardado!");
+        if(tipo === 'OUT') location.reload();
+      }).registrarMarcacion(datos);
+    }
+  </script>
 </body>
 </html>
