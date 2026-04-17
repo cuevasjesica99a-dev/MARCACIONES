@@ -5,139 +5,154 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    #map { height: 250px; width: 100%; border-radius: 15px; z-index: 1; }
-    .input-style { @apply w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-700; }
+    #map { height: 250px; width: 100%; border-radius: 20px; border: 2px solid #e2e8f0; }
+    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
-<body class="bg-slate-100 p-4 font-sans">
-  <div class="max-w-md mx-auto bg-white rounded-[2rem] shadow-2xl p-6 border border-white">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-black text-blue-900 tracking-tighter italic">+MARKA</h1>
-      <span id="gpsDot" class="h-3 w-3 rounded-full bg-red-500 animate-pulse"></span>
+<body class="bg-gray-50 p-3 font-sans">
+  <div class="max-w-md mx-auto bg-white rounded-[2.5rem] shadow-2xl p-6 border border-gray-100">
+    
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-black text-blue-900">+MARKA</h1>
+      <button onclick="obtenerUbicacion()" class="text-[10px] bg-blue-100 text-blue-700 font-bold px-3 py-1 rounded-full uppercase">Refrescar GPS</button>
     </div>
 
-    <div id="map" class="mb-6 shadow-inner"></div>
+    <div id="map" class="mb-6"></div>
 
-    <div class="space-y-4">
+    <div class="space-y-4 text-left">
       <div>
-        <label class="text-[10px] font-black text-slate-400 uppercase ml-2">Cédula del Relevador</label>
-        <input type="number" id="cedulaInput" oninput="validarCedula()" class="input-style" placeholder="Ingrese nro de cédula...">
+        <label class="text-[11px] font-bold text-gray-400 uppercase ml-2">Cédula Relevador</label>
+        <input type="number" id="ciInput" onkeyup="buscarNombre()" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl focus:border-blue-500 outline-none text-lg font-bold" placeholder="Ej: 4357655">
       </div>
 
       <div>
-        <label class="text-[10px] font-black text-slate-400 uppercase ml-2">Nombre Completo</label>
-        <input type="text" id="nombreDisplay" readonly class="input-style bg-slate-100 text-blue-800 font-bold" placeholder="Validando identidad...">
+        <label class="text-[11px] font-bold text-gray-400 uppercase ml-2">Nombre Completo</label>
+        <div id="nombreDisplay" class="w-full bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl text-blue-800 font-bold min-h-[58px]">---</div>
       </div>
 
       <div>
-        <label class="text-[10px] font-black text-slate-400 uppercase ml-2">Buscar Punto de Venta</label>
-        <input type="text" id="pdvSearch" list="listaLocales" onchange="seleccionarPDV()" class="input-style" placeholder="Escriba el nombre del local...">
-        <datalist id="listaLocales"></datalist>
+        <label class="text-[11px] font-bold text-gray-400 uppercase ml-2">Buscar Punto de Venta</label>
+        <input type="text" id="pdvSearch" list="localesData" onchange="seleccionarLocal()" class="w-full bg-gray-50 border-2 border-gray-100 p-4 rounded-2xl focus:border-blue-500 outline-none" placeholder="Escriba el PDV...">
+        <datalist id="localesData"></datalist>
       </div>
 
-      <div id="geoMensaje" class="text-center text-xs font-bold p-2 rounded-xl hidden"></div>
+      <div id="msgStatus" class="text-center text-xs font-bold p-3 rounded-xl hidden"></div>
 
       <div class="grid grid-cols-2 gap-4 pt-4">
-        <button id="btnIn" onclick="procesar('IN')" disabled class="bg-slate-200 text-white font-black py-4 rounded-2xl transition-all uppercase tracking-widest">Check-In</button>
-        <button id="btnOut" onclick="procesar('OUT')" disabled class="bg-slate-200 text-white font-black py-4 rounded-2xl transition-all uppercase tracking-widest">Check-Out</button>
+        <button id="btnIn" onclick="enviar('IN')" disabled class="bg-gray-200 text-white font-black py-4 rounded-2xl uppercase opacity-50">Entrada</button>
+        <button id="btnOut" onclick="enviar('OUT')" disabled class="bg-gray-200 text-white font-black py-4 rounded-2xl uppercase opacity-50">Salida</button>
       </div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    let map, userMarker, db = { empleados: [], locales: [] };
-    let uLat, uLng, localSel = null;
+    let map, marker, circle;
+    let db = { empleados: [], locales: [] };
+    let miLat, miLng, localLat, localLng, localNom;
 
+    // 1. Cargar datos al iniciar
     window.onload = () => {
       map = L.map('map', {zoomControl: false}).setView([-25.28, -57.63], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-      google.script.run.withSuccessHandler(data => {
-        db = data;
-        const list = document.getElementById('listaLocales');
-        data.locales.forEach(l => {
-          let opt = document.createElement('option');
-          opt.value = l.nombre;
-          list.appendChild(opt);
+      
+      google.script.run.withSuccessHandler(res => {
+        db = res;
+        const dl = document.getElementById('localesData');
+        res.locales.forEach(l => {
+          let o = document.createElement('option');
+          o.value = l.nombre;
+          dl.appendChild(o);
         });
       }).obtenerDatosBase();
-
-      navigator.geolocation.watchPosition(p => {
-        uLat = p.coords.latitude; uLng = p.coords.longitude;
-        if (!userMarker) userMarker = L.marker([uLat, uLng]).addTo(map).bindPopup("Tu ubicación").openPopup();
-        else userMarker.setLatLng([uLat, uLng]);
-        document.getElementById('gpsDot').classList.replace('bg-red-500', 'bg-green-500');
-        validarEstadoGeneral();
-      }, null, {enableHighAccuracy: true});
+      
+      obtenerUbicacion();
     };
 
-    function validarCedula() {
-      const ci = document.getElementById('cedulaInput').value;
-      const emp = db.empleados.find(e => e.cedula === ci);
-      document.getElementById('nombreDisplay').value = emp ? emp.nombre : "Cédula no encontrada";
-      validarEstadoGeneral();
-    }
-
-    function seleccionarPDV() {
-      const val = document.getElementById('pdvSearch').value;
-      localSel = db.locales.find(l => l.nombre === val);
-      if (localSel) map.flyTo([localSel.lat, localSel.lng], 16);
-      validarEstadoGeneral();
-    }
-
-    function calcularDistancia(lat1, lon1, lat2, lon2) {
-      const R = 6371e3;
-      const dLat = (lat2-lat1)*Math.PI/180;
-      const dLon = (lon2-lon1)*Math.PI/180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    function validarEstadoGeneral() {
-      const msg = document.getElementById('geoMensaje');
-      const b1 = document.getElementById('btnIn');
-      const b2 = document.getElementById('btnOut');
-      const ciValida = db.empleados.some(e => e.cedula === document.getElementById('cedulaInput').value);
-
-      if (ciValida && localSel && uLat) {
-        const d = calcularDistancia(uLat, uLng, localSel.lat, localSel.lng);
-        msg.classList.remove('hidden');
-        if (d <= 200) {
-          msg.innerText = `UBICACIÓN VÁLIDA: A ${Math.round(d)}m del PDV`;
-          msg.className = "text-center text-xs font-bold p-2 rounded-xl bg-green-100 text-green-700 block";
-          b1.disabled = b2.disabled = false;
-          b1.className = "bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-green-200 active:scale-95 transition-all";
-          b2.className = "bg-red-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-red-200 active:scale-95 transition-all";
+    // 2. Forzar obtención de ubicación
+    function obtenerUbicacion() {
+      if (!navigator.geolocation) return alert("GPS no soportado");
+      
+      navigator.geolocation.getCurrentPosition(p => {
+        miLat = p.coords.latitude;
+        miLng = p.coords.longitude;
+        if (!marker) {
+          marker = L.marker([miLat, miLng]).addTo(map).bindPopup("Estás aquí").openPopup();
         } else {
-          msg.innerText = `FUERA DE RANGO: Estás a ${Math.round(d)}m (Máx 200m)`;
-          msg.className = "text-center text-xs font-bold p-2 rounded-xl bg-red-100 text-red-700 block";
-          b1.disabled = b2.disabled = true;
-          b1.className = b2.className = "bg-slate-200 text-white font-black py-4 rounded-2xl opacity-50";
+          marker.setLatLng([miLat, miLng]);
+        }
+        map.flyTo([miLat, miLng], 15);
+        validarTodo();
+      }, (e) => alert("Error GPS: " + e.message), {enableHighAccuracy: true});
+    }
+
+    // 3. Buscar nombre por cédula
+    function buscarNombre() {
+      const ci = document.getElementById('ciInput').value.toString();
+      const emp = db.empleados.find(e => e.cedula === ci);
+      document.getElementById('nombreDisplay').innerText = emp ? emp.nombre : "❌ Cédula no registrada";
+      validarTodo();
+    }
+
+    // 4. Seleccionar PDV
+    function seleccionarLocal() {
+      const val = document.getElementById('pdvSearch').value;
+      const local = db.locales.find(l => l.nombre === val);
+      if (local) {
+        localLat = local.lat; localLng = local.lng; localNom = local.nombre;
+        if (circle) map.removeLayer(circle);
+        circle = L.circle([localLat, localLng], {radius: 200, color: 'green'}).addTo(map);
+        map.fitBounds(circle.getBounds());
+      }
+      validarTodo();
+    }
+
+    // 5. Validar Distancia y Datos
+    function validarTodo() {
+      const ciValida = db.empleados.some(e => e.cedula === document.getElementById('ciInput').value);
+      const distMsg = document.getElementById('msgStatus');
+      const bin = document.getElementById('btnIn');
+      const bout = document.getElementById('btnOut');
+
+      if (ciValida && localNom && miLat) {
+        const d = calcularD(miLat, miLng, localLat, localLng);
+        distMsg.classList.remove('hidden');
+        if (d <= 200) {
+          distMsg.innerText = `✅ EN RANGO (${Math.round(d)}m)`;
+          distMsg.className = "text-center text-xs font-bold p-3 rounded-xl bg-green-100 text-green-700";
+          bin.disabled = bout.disabled = false;
+          bin.className = "bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-green-200 active:scale-95";
+          bout.className = "bg-red-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-red-200 active:scale-95";
+        } else {
+          distMsg.innerText = `⚠️ FUERA DE RANGO (${Math.round(d)}m). Debes estar a menos de 200m del local.`;
+          distMsg.className = "text-center text-xs font-bold p-3 rounded-xl bg-red-100 text-red-700";
+          bin.disabled = bout.disabled = true;
+          bin.className = bout.className = "bg-gray-200 text-white font-black py-4 rounded-2xl opacity-50";
         }
       }
     }
 
-    function procesar(tipo) {
-      const ci = document.getElementById('cedulaInput').value;
-      const emp = db.empleados.find(e => e.cedula === ci);
-      const ahora = new Date().toLocaleString();
-      
-      const datos = {
-        timestamp: ahora,
-        nombre: emp.nombre,
-        cedula: ci,
-        pdv: localSel.nombre,
-        latActual: uLat, lngActual: uLng,
-        status: "Validación Geo-GPS Exitosa",
-        checkin: tipo === 'IN' ? ahora : "",
-        checkout: tipo === 'OUT' ? ahora : ""
-      };
+    function calcularD(la1, lo1, la2, lo2) {
+      const R = 6371e3;
+      const f1 = la1 * Math.PI/180, f2 = la2 * Math.PI/180;
+      const df = (la2-la1) * Math.PI/180, dl = (lo2-lo1) * Math.PI/180;
+      const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
 
-      google.script.run.withSuccessHandler(r => {
-        alert(r);
-        location.reload();
-      }).registrarMarcacion(datos);
+    function enviar(tipo) {
+      const datos = {
+        timestamp: new Date().toLocaleString(),
+        nombre: document.getElementById('nombreDisplay').innerText,
+        cedula: document.getElementById('ciInput').value,
+        pdv: localNom,
+        latActual: miLat, lngActual: miLng,
+        status: "Validación Exitosa",
+        checkin: tipo === 'IN' ? new Date().toLocaleString() : "",
+        checkout: tipo === 'OUT' ? new Date().toLocaleString() : ""
+      };
+      google.script.run.withSuccessHandler(r => { alert(r); location.reload(); }).registrarMarcacion(datos);
     }
   </script>
 </body>
