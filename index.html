@@ -5,15 +5,17 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    /* El mapa se mantiene intacto según tu instrucción */
-    #map { height: 200px; width: 100%; border-radius: 15px; margin-bottom: 1rem; }
-    .input-field { @apply w-full bg-slate-50 border-2 border-slate-200 p-3 rounded-xl focus:border-blue-600 outline-none transition-all font-medium; }
+    #map { height: 200px; width: 100%; border-radius: 15px; margin-bottom: 1rem; border: 1px solid #ddd; }
+    .input-style { @apply w-full bg-slate-50 border-2 border-slate-200 p-3 rounded-xl focus:border-blue-600 outline-none font-medium transition-all; }
   </style>
 </head>
 <body class="bg-slate-100 p-4">
-  <div class="max-w-md mx-auto bg-white rounded-[2rem] shadow-xl p-6">
+  <div class="max-w-md mx-auto bg-white rounded-[2rem] shadow-2xl p-6">
     
-    <h1 class="text-2xl font-black text-blue-900 mb-4 text-center tracking-tighter italic">+MARKA</h1>
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-black text-blue-900 tracking-tighter italic">+MARKA</h1>
+      <div id="gpsStatus" class="h-3 w-3 rounded-full bg-red-500 animate-pulse"></div>
+    </div>
 
     <div id="map"></div>
 
@@ -22,29 +24,27 @@
       <div>
         <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Documento de Identidad</label>
         <div class="flex gap-2">
-          <input type="number" id="cedulaInput" class="input-field" placeholder="Ej: 4357655">
-          <button onclick="buscarPorCedula()" class="bg-blue-600 text-white px-4 rounded-xl font-bold text-sm active:scale-95 transition-transform">
-            BUSCAR
-          </button>
+          <input type="text" id="cedulaInput" class="input-style" placeholder="Ej: 4357655">
+          <button onclick="buscarPorCedula()" class="bg-blue-700 text-white px-5 rounded-xl font-bold active:scale-95">BUSCAR</button>
         </div>
       </div>
 
       <div>
         <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Nombre del Relevador</label>
-        <input type="text" id="nombreDisplay" readonly class="input-field bg-slate-100 text-blue-700 border-none" placeholder="El nombre aparecerá aquí">
+        <input type="text" id="nombreDisplay" readonly class="input-style bg-slate-100 text-blue-800 border-none" placeholder="El nombre aparecerá aquí">
       </div>
 
       <div>
-        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Buscar Punto de Venta (PDV)</label>
-        <input type="text" id="pdvSearch" list="datalistLocales" onchange="validarPDV()" class="input-field" placeholder="Escriba el nombre del local...">
-        <datalist id="datalistLocales"></datalist>
+        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Punto de Venta (PDV)</label>
+        <input type="text" id="pdvSearch" list="listadoLocales" onchange="seleccionarLocal()" class="input-style" placeholder="Escriba nombre del local...">
+        <datalist id="listadoLocales"></datalist>
       </div>
 
-      <div id="infoDistancia" class="hidden text-center text-xs font-bold p-3 rounded-xl"></div>
+      <div id="avisoDistancia" class="hidden text-center text-[11px] font-bold p-3 rounded-xl"></div>
 
       <div class="grid grid-cols-2 gap-4 pt-4">
-        <button id="btnIn" disabled onclick="enviar('IN')" class="bg-slate-300 text-white font-black py-4 rounded-2xl uppercase tracking-widest opacity-50">Check-In</button>
-        <button id="btnOut" disabled onclick="enviar('OUT')" class="bg-slate-300 text-white font-black py-4 rounded-2xl uppercase tracking-widest opacity-50">Check-Out</button>
+        <button id="btnIn" disabled onclick="enviar('IN')" class="bg-slate-300 text-white font-black py-4 rounded-2xl uppercase opacity-50">Check-In</button>
+        <button id="btnOut" disabled onclick="enviar('OUT')" class="bg-slate-300 text-white font-black py-4 rounded-2xl uppercase opacity-50">Check-Out</button>
       </div>
     </div>
   </div>
@@ -52,95 +52,83 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     let map, userMarker, db = { empleados: [], locales: [] };
-    let miLat, miLng, localSeleccionado = null;
+    let miLat, miLng, localDestino = null;
 
-    // Inicialización
     window.onload = () => {
-      // Configuración del mapa (se mantiene)
+      // Inicializar mapa
       map = L.map('map', {zoomControl: false}).setView([-25.28, -57.63], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-      // Cargar Base de Datos
+      // Cargar base de datos desde el Script
       google.script.run.withSuccessHandler(data => {
         db = data;
-        const dl = document.getElementById('datalistLocales');
+        const dl = document.getElementById('listadoLocales');
         data.locales.forEach(l => {
-          let opt = document.createElement('option');
-          opt.value = l.nombre;
-          dl.appendChild(opt);
+          let o = document.createElement('option');
+          o.value = l.nombre;
+          dl.appendChild(o);
         });
       }).obtenerDatosBase();
 
-      // GPS Actual
+      // Geolocalización constante
       navigator.geolocation.watchPosition(p => {
         miLat = p.coords.latitude; miLng = p.coords.longitude;
         if (!userMarker) userMarker = L.marker([miLat, miLng]).addTo(map);
         else userMarker.setLatLng([miLat, miLng]);
-        verificarCercania();
+        document.getElementById('gpsStatus').classList.replace('bg-red-500', 'bg-green-500');
+        validarEstado();
       }, null, {enableHighAccuracy: true});
     };
 
-    // FUNCIÓN: BUSCAR NOMBRE POR CÉDULA
     function buscarPorCedula() {
-      const ci = document.getElementById('cedulaInput').value.trim();
-      if (!ci) return alert("Ingrese un número de cédula");
-      
+      // Limpiamos la entrada del usuario de puntos o espacios
+      const ci = document.getElementById('cedulaInput').value.replace(/[^0-9]/g, "").trim();
       const emp = db.empleados.find(e => e.cedula === ci);
+      
       if (emp) {
         document.getElementById('nombreDisplay').value = emp.nombre;
       } else {
         document.getElementById('nombreDisplay').value = "";
-        alert("❌ Cédula no encontrada en la base de datos.");
+        alert("❌ Cédula no encontrada en la pestaña 'empleado'. Revise el número.");
       }
-      verificarCercania();
+      validarEstado();
     }
 
-    // FUNCIÓN: SELECCIONAR PDV DEL BUSCADOR
-    function validarPDV() {
-      const nom = document.getElementById('pdvSearch').value;
-      localSeleccionado = db.locales.find(l => l.nombre === nom);
-      if (localSeleccionado) {
-        map.flyTo([localSeleccionado.lat, localSeleccionado.lng], 16);
+    function seleccionarLocal() {
+      const val = document.getElementById('pdvSearch').value.toUpperCase();
+      localDestino = db.locales.find(l => l.nombre === val);
+      if (localDestino) {
+        map.flyTo([localDestino.lat, localDestino.lng], 16);
       }
-      verificarCercania();
+      validarEstado();
     }
 
-    // LÓGICA DE VALIDACIÓN DE DISTANCIA (200m)
-    function verificarCercania() {
-      const nomEmp = document.getElementById('nombreDisplay').value;
-      const info = document.getElementById('infoDistancia');
-      const b1 = document.getElementById('btnIn');
-      const b2 = document.getElementById('btnOut');
+    function validarEstado() {
+      const nom = document.getElementById('nombreDisplay').value;
+      const aviso = document.getElementById('avisoDistancia');
+      const bin = document.getElementById('btnIn');
+      const bout = document.getElementById('btnOut');
 
-      if (nomEmp && localSeleccionado && miLat) {
-        const d = calcularD(miLat, miLng, localSeleccionado.lat, localSeleccionado.lng);
-        info.classList.remove('hidden');
+      if (nom && localDestino && miLat) {
+        const d = calcularDistancia(miLat, miLng, localDestino.lat, localDestino.lng);
+        aviso.classList.remove('hidden');
         
         if (d <= 200) {
-          info.innerText = `✅ ESTÁS EN EL LOCAL (${Math.round(d)}m)`;
-          info.className = "text-center text-xs font-bold p-3 rounded-xl bg-green-100 text-green-700 block";
-          activarBotones(true);
+          aviso.innerText = `DENTRO DEL RANGO (${Math.round(d)}m)`;
+          aviso.className = "text-center text-[11px] font-bold p-3 rounded-xl bg-green-100 text-green-700 block";
+          bin.disabled = bout.disabled = false;
+          bin.className = "bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95";
+          bout.className = "bg-red-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95";
         } else {
-          info.innerText = `⚠️ FUERA DE RANGO (${Math.round(d)}m). ACÉRCATE MÁS.`;
-          info.className = "text-center text-xs font-bold p-3 rounded-xl bg-red-100 text-red-700 block";
-          activarBotones(false);
+          aviso.innerText = `DEMASIADO LEJOS (${Math.round(d)}m). MÁXIMO 200m.`;
+          aviso.className = "text-center text-[11px] font-bold p-3 rounded-xl bg-red-100 text-red-700 block";
+          bin.disabled = bout.disabled = true;
+          bin.className = bout.className = "bg-slate-300 text-white font-black py-4 rounded-2xl opacity-50";
         }
       }
     }
 
-    function activarBotones(ok) {
-      const b1 = document.getElementById('btnIn');
-      const b2 = document.getElementById('btnOut');
-      b1.disabled = b2.disabled = !ok;
-      if(ok) {
-        b1.className = "bg-green-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all";
-        b2.className = "bg-red-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all";
-      } else {
-        b1.className = b2.className = "bg-slate-300 text-white font-black py-4 rounded-2xl opacity-50 cursor-not-allowed";
-      }
-    }
-
-    function calcularD(la1, lo1, la2, lo2) {
+    function calcularDistancia(la1, lo1, la2, lo2) {
       const R = 6371e3;
       const f1 = la1 * Math.PI/180, f2 = la2 * Math.PI/180;
       const df = (la2-la1) * Math.PI/180, dl = (lo2-lo1) * Math.PI/180;
@@ -150,16 +138,17 @@
 
     function enviar(tipo) {
       const datos = {
-        timestamp: new Date().toLocaleString(),
         nombre: document.getElementById('nombreDisplay').value,
         cedula: document.getElementById('cedulaInput').value,
-        pdv: localSeleccionado.nombre,
+        pdv: localDestino.nombre,
         latActual: miLat, lngActual: miLng,
-        status: "Validación Presencial OK",
         checkin: tipo === 'IN' ? new Date().toLocaleString() : "",
         checkout: tipo === 'OUT' ? new Date().toLocaleString() : ""
       };
-      google.script.run.withSuccessHandler(r => { alert(r); location.reload(); }).registrarMarcacion(datos);
+      google.script.run.withSuccessHandler(r => { 
+        alert(r); 
+        location.reload(); 
+      }).registrarMarcacion(datos);
     }
   </script>
 </body>
