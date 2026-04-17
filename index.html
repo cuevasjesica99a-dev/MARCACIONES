@@ -5,131 +5,155 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    #map { height: 200px; width: 100%; border-radius: 12px; margin-bottom: 1rem; }
-    .select-custom { @apply w-full border-2 border-slate-200 p-3 rounded-xl focus:border-blue-500 outline-none transition-all bg-white; }
+    #map { height: 220px; width: 100%; border-radius: 12px; }
+    .status-badge { @apply text-[10px] font-bold px-2 py-1 rounded-full uppercase; }
   </style>
 </head>
-<body class="bg-slate-100 p-4">
-  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6">
-    <header class="text-center mb-6">
-      <h1 class="text-2xl font-black text-slate-800 tracking-tight">+MARKA</h1>
-      <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">Panel de Relevamiento</p>
-    </header>
+<body class="bg-slate-50 p-4">
+  <div class="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 border border-slate-100">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-black text-blue-900 tracking-tighter">+MARKA</h1>
+      <div id="gpsStatus" class="status-badge bg-red-100 text-red-600">GPS Desconectado</div>
+    </div>
 
-    <div id="map"></div>
+    <div id="map" class="shadow-inner mb-6"></div>
 
-    <form id="formMarcacion" class="space-y-4">
+    <form class="space-y-4">
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre del Relevador</label>
-        <select id="nombre" onchange="autoCompletarCedula()" class="select-custom border-2 border-slate-200 w-full p-3 rounded-xl">
-          <option value="">Cargando personal...</option>
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Relevador</label>
+        <select id="nombre" onchange="vincularID()" class="w-full border-2 border-slate-100 p-3 rounded-2xl focus:border-blue-500 outline-none bg-slate-50">
+          <option value="">Cargando lista de personal...</option>
         </select>
       </div>
 
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Cédula de Identidad</label>
-        <input type="text" id="cedula" readonly class="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl text-slate-500 font-mono" placeholder="ID automático">
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Documento Identidad</label>
+        <input type="text" id="cedula" readonly class="w-full bg-slate-100 border-none p-3 rounded-2xl text-slate-400 font-mono" placeholder="Se llena al elegir nombre">
       </div>
 
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Punto de Venta</label>
-        <select id="pdv" onchange="enfocarPDV()" class="select-custom border-2 border-slate-200 w-full p-3 rounded-xl">
+        <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Punto de Venta (PDV)</label>
+        <select id="pdv" onchange="verificarZona()" class="w-full border-2 border-slate-100 p-3 rounded-2xl focus:border-blue-500 outline-none bg-slate-50">
           <option value="">Cargando locales...</option>
         </select>
       </div>
 
-      <div class="grid grid-cols-2 gap-4 mt-6">
-        <button type="button" onclick="enviar('IN')" class="bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">CHECK-IN</button>
-        <button type="button" onclick="enviar('OUT')" class="bg-rose-600 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-all">CHECK-OUT</button>
+      <div id="distanciaMsg" class="hidden text-center p-3 rounded-2xl text-sm font-bold"></div>
+
+      <div class="grid grid-cols-2 gap-4 mt-8">
+        <button type="button" id="btnIn" disabled onclick="enviar('IN')" class="bg-slate-200 text-white font-bold py-4 rounded-2xl transition-all shadow-lg opacity-50">CHECK-IN</button>
+        <button type="button" id="btnOut" disabled onclick="enviar('OUT')" class="bg-slate-200 text-white font-bold py-4 rounded-2xl transition-all shadow-lg opacity-50">CHECK-OUT</button>
       </div>
     </form>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    let map, userMarker, pdvMarker;
-    let userLat, userLng;
-    let listaLocales = [];
-    let listaEmpleados = [];
+    let map, userMarker, pdvCircle;
+    let uLat, uLng;
+    let db = { locales: [], empleados: [] };
 
     window.onload = () => {
-      map = L.map('map').setView([-25.30, -57.60], 12);
+      map = L.map('map', {zoomControl: false}).setView([-25.30, -57.60], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-      // Cargar TODO desde el Sheet
       google.script.run.withSuccessHandler(res => {
-        // Llenar Empleados
-        listaEmpleados = res.empleados;
-        const selEmp = document.getElementById('nombre');
-        selEmp.innerHTML = '<option value="">Seleccione su nombre...</option>';
-        res.empleados.forEach((e, i) => {
-          let opt = document.createElement('option');
-          opt.value = i;
-          opt.innerHTML = e.nombre;
-          selEmp.appendChild(opt);
-        });
-
-        // Llenar Locales
-        listaLocales = res.locales;
-        const selPdv = document.getElementById('pdv');
-        selPdv.innerHTML = '<option value="">Seleccione el local...</option>';
-        res.locales.forEach((l, i) => {
-          let opt = document.createElement('option');
-          opt.value = i;
-          opt.innerHTML = l.nombre;
-          selPdv.appendChild(opt);
-        });
+        db = res;
+        llenarSelect('nombre', res.empleados, 'nombre');
+        llenarSelect('pdv', res.locales, 'nombre');
       }).obtenerDatosBase();
 
-      navigator.geolocation.watchPosition(pos => {
-        userLat = pos.coords.latitude;
-        userLng = pos.coords.longitude;
-        if (!userMarker) {
-          userMarker = L.circleMarker([userLat, userLng], {color: '#3b82f6', radius: 8, fillOpacity: 0.8}).addTo(map);
-        } else {
-          userMarker.setLatLng([userLat, userLng]);
-        }
+      navigator.geolocation.watchPosition(p => {
+        uLat = p.coords.latitude; uLng = p.coords.longitude;
+        actualizarMapa();
+        verificarZona();
+        document.getElementById('gpsStatus').className = "status-badge bg-green-100 text-green-600";
+        document.getElementById('gpsStatus').innerText = "GPS Activo";
       }, null, {enableHighAccuracy: true});
     };
 
-    function autoCompletarCedula() {
-      const idx = document.getElementById('nombre').value;
-      if(idx !== "") document.getElementById('cedula').value = listaEmpleados[idx].cedula;
+    function llenarSelect(id, lista, campo) {
+      const el = document.getElementById(id);
+      el.innerHTML = `<option value="">Seleccione ${id}...</option>`;
+      lista.forEach((item, i) => {
+        let opt = document.createElement('option');
+        opt.value = i; opt.innerText = item[campo];
+        el.appendChild(opt);
+      });
     }
 
-    function enfocarPDV() {
-      const idx = document.getElementById('pdv').value;
-      if (idx === "") return;
-      const local = listaLocales[idx];
-      if (pdvMarker) map.removeLayer(pdvMarker);
-      pdvMarker = L.marker([local.lat, local.lng]).addTo(map).bindPopup(local.nombre).openPopup();
+    function vincularID() {
+      const i = document.getElementById('nombre').value;
+      document.getElementById('cedula').value = i !== "" ? db.empleados[i].cedula : "";
+    }
+
+    function calcularDistancia(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2-lat1) * Math.PI/180;
+      const Δλ = (lon2-lon1) * Math.PI/180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function verificarZona() {
+      const i = document.getElementById('pdv').value;
+      if (i === "" || !uLat) return;
+      
+      const local = db.locales[i];
+      const dist = calcularDistancia(uLat, uLng, local.lat, local.lng);
+      const msg = document.getElementById('distanciaMsg');
+      const b1 = document.getElementById('btnIn');
+      const b2 = document.getElementById('btnOut');
+
+      msg.classList.remove('hidden');
+      if (dist <= 200) {
+        msg.innerText = `📍 Estás en zona (${Math.round(dist)}m)`;
+        msg.className = "text-center p-3 rounded-2xl text-sm font-bold bg-green-50 text-green-700";
+        activarBotones(true);
+      } else {
+        msg.innerText = `❌ Fuera de rango (${Math.round(dist)}m). Máximo 200m.`;
+        msg.className = "text-center p-3 rounded-2xl text-sm font-bold bg-red-50 text-red-700";
+        activarBotones(false);
+      }
+      
+      if(pdvCircle) map.removeLayer(pdvCircle);
+      pdvCircle = L.circle([local.lat, local.lng], {radius: 200, color: 'green', fillOpacity: 0.1}).addTo(map);
       map.flyTo([local.lat, local.lng], 16);
     }
 
-    function enviar(tipo) {
-      const idxEmp = document.getElementById('nombre').value;
-      const idxPdv = document.getElementById('pdv').value;
-      
-      if (!userLat || idxEmp === "" || idxPdv === "") {
-        alert("Faltan datos o señal GPS.");
-        return;
-      }
+    function activarBotones(ok) {
+      const b1 = document.getElementById('btnIn');
+      const b2 = document.getElementById('btnOut');
+      b1.disabled = !ok; b2.disabled = !ok;
+      b1.className = ok ? "bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg" : "bg-slate-200 text-white font-bold py-4 rounded-2xl opacity-50";
+      b2.className = ok ? "bg-rose-600 text-white font-bold py-4 rounded-2xl shadow-lg" : "bg-slate-200 text-white font-bold py-4 rounded-2xl opacity-50";
+    }
 
+    function actualizarMapa() {
+      if (!userMarker) userMarker = L.marker([uLat, uLng]).addTo(map);
+      else userMarker.setLatLng([uLat, uLng]);
+    }
+
+    function enviar(tipo) {
       const ahora = new Date().toLocaleString();
+      const iL = document.getElementById('pdv').value;
+      const iE = document.getElementById('nombre').value;
+      
       const datos = {
         timestamp: ahora,
-        nombre: listaEmpleados[idxEmp].nombre,
-        cedula: listaEmpleados[idxEmp].cedula,
-        pdv: listaLocales[idxPdv].nombre,
-        latActual: userLat,
-        lngActual: userLng,
-        validacion: "GPS OK",
+        nombre: db.empleados[iE].nombre,
+        cedula: db.empleados[iE].cedula,
+        pdv: db.locales[iL].nombre,
+        latActual: uLat, lngActual: uLng,
+        validacion: "Validado (Radio 200m)",
         checkin: tipo === 'IN' ? ahora : "",
         checkout: tipo === 'OUT' ? ahora : ""
       };
 
       google.script.run.withSuccessHandler(() => {
-        alert("¡Registro guardado!");
+        alert("Marcación registrada exitosamente.");
         if(tipo === 'OUT') location.reload();
       }).registrarMarcacion(datos);
     }
