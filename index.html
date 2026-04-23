@@ -3,100 +3,263 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard +Marka | Final</title>
+  <title>Dashboard +Marka | Control de Gestión</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  
   <style>
-    body { font-family: sans-serif; background: #f0f2f5; padding: 20px; margin: 0; color: #333; }
-    .header { background: #004a99; color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-    .kpi-card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-bottom: 4px solid #ffc107; }
-    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; }
-    .chart-box { background: white; padding: 20px; border-radius: 12px; min-height: 350px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-    button { background: #ffc107; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    :root {
+      --primary: #004a99;
+      --secondary: #ffc107;
+      --bg: #f4f7fa;
+      --white: #ffffff;
+      --text: #2d3436;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container { max-width: 1300px; margin: auto; }
+
+    /* Encabezado */
+    .header {
+      background: var(--primary);
+      color: white;
+      padding: 25px;
+      border-radius: 15px;
+      margin-bottom: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 10px 20px rgba(0,74,153,0.15);
+    }
+
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+
+    /* Tarjetas KPI */
+    .kpi-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-bottom: 25px;
+    }
+
+    .kpi-card {
+      background: var(--white);
+      padding: 25px;
+      border-radius: 15px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      border-bottom: 4px solid var(--secondary);
+    }
+
+    .kpi-card span { font-size: 13px; color: #636e72; text-transform: uppercase; letter-spacing: 1px; }
+    .kpi-card h2 { margin: 10px 0 0; font-size: 36px; color: var(--primary); }
+
+    /* Filtros */
+    .filter-bar {
+      background: var(--white);
+      padding: 20px;
+      border-radius: 15px;
+      margin-bottom: 25px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .filter-bar select, .filter-bar input {
+      padding: 12px;
+      border: 1px solid #dfe6e9;
+      border-radius: 10px;
+      flex: 1;
+      min-width: 180px;
+      outline: none;
+      font-size: 14px;
+    }
+
+    /* Gráficos */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 25px;
+    }
+
+    .chart-card {
+      background: var(--white);
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      min-height: 400px;
+    }
+
+    .chart-card h3 { margin-top: 0; font-size: 16px; color: var(--primary); border-bottom: 1px solid #eee; padding-bottom: 10px; }
+
+    /* Animación Loader */
+    #loader {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--bg);
+      display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;
+    }
+
+    .spinner {
+      border: 6px solid #eaf0f6;
+      border-top: 6px solid var(--primary);
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
 
-<div id="loader">
-    <div style="border: 5px solid #f3f3f3; border-top: 5px solid #004a99; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
-    <p>Conectando con Google Sheets...</p>
-</div>
-
-<div class="container">
-  <div class="header">
-    <h2 style="margin:0">📊 Tablero de Gestión +Marka</h2>
-    <button onclick="fetchData()">🔄 Actualizar</button>
+  <div id="loader">
+    <div class="spinner"></div>
+    <p style="margin-top: 15px; font-weight: 600; color: var(--primary);">Cargando registros...</p>
   </div>
 
-  <div class="kpi-grid">
-    <div class="kpi-card">Total Visitas<h1 id="kVis">0</h1></div>
-    <div class="kpi-card">Supervisores<h1 id="kSup">0</h1></div>
-    <div class="kpi-card">Locales<h1 id="kPdv">0</h1></div>
+  <div class="container">
+    <div class="header">
+      <h1>📊 Dashboard Operativo +Marka</h1>
+      <button onclick="fetchData()" style="background: var(--secondary); border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 700;">🔄 Actualizar</button>
+    </div>
+
+    <div class="filter-bar">
+      <select id="selSupervisor" onchange="applyFilters()"><option value="ALL">Todos los Supervisores</option></select>
+      <select id="selFormulario" onchange="applyFilters()"><option value="ALL">Todos los Formularios</option></select>
+      <input type="date" id="dateDesde" onchange="applyFilters()" title="Fecha Desde">
+      <input type="date" id="dateHasta" onchange="applyFilters()" title="Fecha Hasta">
+    </div>
+
+    <div class="kpi-container">
+      <div class="kpi-card"><span>Total Visitas</span><h2 id="kpiVisitas">0</h2></div>
+      <div class="kpi-card"><span>Supervisores</span><h2 id="kpiSups">0</h2></div>
+      <div class="kpi-card"><span>Locales Visitados</span><h2 id="kpiPdvs">0</h2></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><h3>Visitas por Supervisor</h3><div id="chart_bar"></div></div>
+      <div class="chart-card"><h3>Distribución por Formulario</h3><div id="chart_pie"></div></div>
+      <div class="chart-card"><h3>Tendencia Temporal</h3><div id="chart_line"></div></div>
+      <div class="chart-card"><h3>Top 10 Puntos de Venta</h3><div id="chart_pdv"></div></div>
+    </div>
   </div>
 
-  <div class="charts-grid">
-    <div class="chart-box"><div id="cBar" style="height: 350px;"></div></div>
-    <div class="chart-box"><div id="cPie" style="height: 350px;"></div></div>
-  </div>
-</div>
+  <script>
+    // URL DE TU SCRIPT (ACTUALIZADA)
+    const API_URL = "https://script.google.com/macros/s/AKfycbz-lrFyoxXaSEpYanB4WYxOVYVGoDjuXzvDioPxucszg033nwkJH8d0e5_vDzca8vSfEQ/exec";
 
-<script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbz-lrFyoxXaSEpYanB4WYxOVYVGoDjuXzvDioPxucszg033nwkJH8d0e5_vDzca8vSfEQ/exec";
+    let RAW_DATA = [];
+    google.charts.load('current', {'packages':['corechart', 'bar']});
 
-  google.charts.load('current', {'packages':['corechart']});
-
-  async function fetchData() {
-    document.getElementById('loader').style.display = 'flex';
-    try {
-      const resp = await fetch(API_URL);
-      const rawData = await resp.json();
-      
-      if (!rawData || rawData.length === 0) {
-          alert("El Sheet está vacío o no tiene el formato correcto.");
-          return;
+    async function fetchData() {
+      document.getElementById('loader').style.display = 'flex';
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error("No se pudo conectar");
+        RAW_DATA = await response.json();
+        
+        setupFilters();
+        applyFilters();
+      } catch (e) {
+        console.error(e);
+        alert("Error de conexión: Verifica que tu Script de Google esté publicado como 'Cualquiera'.");
+      } finally {
+        document.getElementById('loader').style.display = 'none';
       }
+    }
 
-      // Normalizar datos (convertir todo a mayúsculas para evitar errores)
-      const data = rawData.map(d => {
-          let obj = {};
-          for (let key in d) {
-              obj[key.toUpperCase().trim()] = d[key];
-          }
-          return obj;
+    function setupFilters() {
+      const sups = [...new Set(RAW_DATA.map(d => d.SUPERVISOR))].sort();
+      const forms = [...new Set(RAW_DATA.map(d => d.FORMULARIO))].sort();
+      
+      const sSup = document.getElementById('selSupervisor');
+      const sForm = document.getElementById('selFormulario');
+      
+      sSup.innerHTML = '<option value="ALL">Todos los Supervisores</option>';
+      sForm.innerHTML = '<option value="ALL">Todos los Formularios</option>';
+      
+      sups.forEach(s => sSup.innerHTML += `<option value="${s}">${s}</option>`);
+      forms.forEach(f => sForm.innerHTML += `<option value="${f}">${f}</option>`);
+    }
+
+    function applyFilters() {
+      const fSup = document.getElementById('selSupervisor').value;
+      const fForm = document.getElementById('selFormulario').value;
+      const fDesde = document.getElementById('dateDesde').value;
+      const fHasta = document.getElementById('dateHasta').value;
+
+      const filtered = RAW_DATA.filter(row => {
+        const matchSup = fSup === "ALL" || row.SUPERVISOR === fSup;
+        const matchForm = fForm === "ALL" || row.FORMULARIO === fForm;
+        
+        let fechaClean = row.FECHA.split('T')[0];
+        const matchDesde = !fDesde || fechaClean >= fDesde;
+        const matchHasta = !fHasta || fechaClean <= fHasta;
+        
+        return matchSup && matchForm && matchDesde && matchHasta;
       });
 
-      // Actualizar indicadores
-      document.getElementById('kVis').innerText = data.length;
-      document.getElementById('kSup').innerText = [...new Set(data.map(d => d.SUPERVISOR || d.supervisor))].length;
-      document.getElementById('kPdv').innerText = [...new Set(data.map(d => d["PUNTO DE VENTA"] || d.pdv))].length;
-
-      drawCharts(data);
-    } catch (e) {
-      console.error(e);
-      alert("Error al cargar datos. Revisa la consola.");
-    } finally {
-      document.getElementById('loader').style.display = 'none';
+      renderDashboard(filtered);
     }
-  }
 
-  function drawCharts(data) {
-    // Gráfico Supervisores
-    let sMap = {}; data.forEach(d => { let s = d.SUPERVISOR || "N/A"; sMap[s] = (sMap[s] || 0) + 1; });
-    let dBar = google.visualization.arrayToDataTable([['Supervisor', 'Visitas'], ...Object.entries(sMap)]);
-    new google.visualization.ColumnChart(document.getElementById('cBar')).draw(dBar, {title: 'Visitas por Supervisor', colors:['#004a99'], chartArea:{width:'70%', height:'70%'} });
+    function renderDashboard(data) {
+      // KPIs
+      document.getElementById('kpiVisitas').innerText = data.length;
+      document.getElementById('kpiSups').innerText = [...new Set(data.map(d => d.SUPERVISOR))].length;
+      document.getElementById('kpiPdvs').innerText = [...new Set(data.map(d => d["PUNTO DE VENTA"]))].length;
 
-    // Gráfico Formularios
-    let fMap = {}; data.forEach(d => { let f = d.FORMULARIO || "N/A"; fMap[f] = (fMap[f] || 0) + 1; });
-    let dPie = google.visualization.arrayToDataTable([['Form', 'Cant'], ...Object.entries(fMap)]);
-    new google.visualization.PieChart(document.getElementById('cPie')).draw(dPie, {title: 'Uso de Formularios', pieHole: 0.4});
-  }
+      // 1. Barras: Supervisores
+      let countSup = {};
+      data.forEach(d => countSup[d.SUPERVISOR] = (countSup[d.SUPERVISOR] || 0) + 1);
+      let dataBar = google.visualization.arrayToDataTable([
+        ['Supervisor', 'Visitas', { role: 'style' }],
+        ...Object.entries(countSup).map(([k, v]) => [k, v, '#004a99'])
+      ]);
+      new google.visualization.ColumnChart(document.getElementById('chart_bar')).draw(dataBar, { legend: 'none', chartArea:{width:'80%', height:'70%'} });
 
-  const style = document.createElement('style');
-  style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-  document.head.appendChild(style);
+      // 2. Torta: Formularios
+      let countForm = {};
+      data.forEach(d => countForm[d.FORMULARIO] = (countForm[d.FORMULARIO] || 0) + 1);
+      let dataPie = google.visualization.arrayToDataTable([
+        ['Formulario', 'Total'],
+        ...Object.entries(countForm)
+      ]);
+      new google.visualization.PieChart(document.getElementById('chart_pie')).draw(dataPie, { pieHole: 0.4, colors: ['#004a99', '#ffc107', '#2ecc71', '#e74c3c', '#9b59b6'] });
 
-  google.charts.setOnLoadCallback(fetchData);
-</script>
+      // 3. Línea: Tiempo
+      let countFecha = {};
+      data.forEach(d => {
+        let f = d.FECHA.split('T')[0];
+        countFecha[f] = (countFecha[f] || 0) + 1;
+      });
+      let sortedFechas = Object.entries(countFecha).sort((a,b) => a[0].localeCompare(b[0]));
+      let dataLine = google.visualization.arrayToDataTable([['Fecha', 'Visitas'], ...sortedFechas]);
+      new google.visualization.LineChart(document.getElementById('chart_line')).draw(dataLine, { colors: ['#ffc107'], legend: 'none', chartArea:{width:'85%'} });
+
+      // 4. Barras: PDV Top 10
+      let countPdv = {};
+      data.forEach(d => {
+        let p = d["PUNTO DE VENTA"];
+        countPdv[p] = (countPdv[p] || 0) + 1;
+      });
+      let topPdv = Object.entries(countPdv).sort((a,b) => b[1]-a[1]).slice(0, 10);
+      let dataPdv = google.visualization.arrayToDataTable([['PDV', 'Visitas'], ...topPdv]);
+      new google.visualization.BarChart(document.getElementById('chart_pdv')).draw(dataPdv, { colors: ['#2ecc71'], legend: 'none', chartArea:{width:'70%'} });
+    }
+
+    google.charts.setOnLoadCallback(fetchData);
+  </script>
 </body>
 </html>
